@@ -11,12 +11,14 @@ import math
 
 from openunmix.filtering import wiener
 import torch
-from torch import nn
+from torch import nn, randn
 from torch.nn import functional as F
 from fractions import Fraction
 from einops import rearrange
 
 from .transformer import CrossTransformerEncoder
+
+from .dumper import *
 
 from .demucs import rescale_module
 from .states import capture_init
@@ -525,6 +527,8 @@ class HTDemucs(nn.Module):
         return training_length
 
     def forward(self, mix):
+#        print("htdemucs shape", mix.shape)
+#        print("bottom_channels", self.bottom_channels)
         length = mix.shape[-1]
         length_pre_pad = None
         if self.use_train_segment:
@@ -532,15 +536,21 @@ class HTDemucs(nn.Module):
                 self.segment = Fraction(mix.shape[-1], self.samplerate)
             else:
                 training_length = int(self.segment * self.samplerate)
-                if mix.shape[-1] < training_length:
-                    length_pre_pad = mix.shape[-1]
-                    mix = F.pad(mix, (0, training_length - length_pre_pad))
+            if mix.shape[-1] < training_length:
+                length_pre_pad = mix.shape[-1]
+                mix = F.pad(mix, (0, training_length - length_pre_pad))
+        print("padded shape", mix.shape)
         z = self._spec(mix)
+#        z = stft
+        print("stft shape", z.shape, z.dtype)
         mag = self._magnitude(z).to(mix.device)
         x = mag
+        
+        dump(mix, "mix")
+        dump(x, "mag")
 
         B, C, Fq, T = x.shape
-
+        
         # unlike previous Demucs, we always normalize because it is easier.
         mean = x.mean(dim=(1, 2, 3), keepdim=True)
         std = x.std(dim=(1, 2, 3), keepdim=True)
@@ -552,6 +562,11 @@ class HTDemucs(nn.Module):
         meant = xt.mean(dim=(1, 2), keepdim=True)
         stdt = xt.std(dim=(1, 2), keepdim=True)
         xt = (xt - meant) / (1e-5 + stdt)
+
+        xt = randn(1, 2, 343980)
+        x  = randn(1, 4, 2048, 336)
+        dump(xt, "meanmix")
+        dump(x, "meanmag")
 
         # okay, this is a giant mess I know...
         saved = []  # skip connections, freq.
@@ -622,6 +637,8 @@ class HTDemucs(nn.Module):
         assert len(saved_t) == 0
 
         S = len(self.sources)
+        dump(x, "xpremean");
+        
         x = x.view(B, S, -1, Fq, T)
         x = x * std[:, None] + mean[:, None]
 
@@ -633,6 +650,10 @@ class HTDemucs(nn.Module):
         x_device = x.device
         if x_is_mps_xpu:
             x = x.cpu()
+        
+        dump(x, "x");
+        dump(xt, "xt");
+        #return x, xt
 
         zout = self._mask(z, x)
         if self.use_train_segment:

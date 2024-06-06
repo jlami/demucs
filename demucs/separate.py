@@ -119,6 +119,7 @@ def main(opts=None):
         print("error: the following arguments are required: tracks", file=sys.stderr)
         sys.exit(1)
 
+    print("args", args)
     try:
         separator = Separator(model=args.name,
                               repo=args.repo,
@@ -126,7 +127,7 @@ def main(opts=None):
                               shifts=args.shifts,
                               split=args.split,
                               overlap=args.overlap,
-                              progress=True,
+                              progress=False,
                               jobs=args.jobs,
                               segment=args.segment)
     except ModelLoadingError as error:

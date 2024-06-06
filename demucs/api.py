@@ -34,7 +34,7 @@ from .apply import apply_model, _replace_dict
 from .audio import AudioFile, convert_audio, save_audio
 from .pretrained import get_model, _parse_remote_files, REMOTE_ROOT
 from .repo import RemoteRepo, LocalRepo, ModelOnlyRepo, BagOnlyRepo
-
+from .dumper import dump
 
 class LoadAudioError(Exception):
     pass
@@ -265,6 +265,8 @@ class Separator:
         """
         if sr is not None and sr != self.samplerate:
             wav = convert_audio(wav, sr, self._samplerate, self._audio_channels)
+        print("wav", wav.shape)
+        dump(wav, "wav");
         ref = wav.mean(0)
         wav -= ref.mean()
         wav /= ref.std() + 1e-8

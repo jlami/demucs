@@ -18,6 +18,7 @@ from torch import nn
 from torch.nn import functional as F
 import tqdm
 
+from .dumper import *
 from .demucs import Demucs
 from .hdemucs import HDemucs
 from .htdemucs import HTDemucs
@@ -141,7 +142,6 @@ def _replace_dict(_dict: tp.Optional[dict], *subs: tp.Tuple[tp.Hashable, tp.Any]
         _dict[key] = value
     return _dict
 
-
 def apply_model(model: tp.Union[BagOfModels, Model],
                 mix: tp.Union[th.Tensor, TensorChunk],
                 shifts: int = 1, split: bool = True,
@@ -234,6 +234,7 @@ def apply_model(model: tp.Union[BagOfModels, Model],
     model.eval()
     assert transition_power >= 1, "transition_power < 1 leads to weird behavior."
     batch, channels, length = mix.shape
+    print("transition_power", transition_power)
     if shifts:
         kwargs['shifts'] = 0
         max_shift = int(0.5 * model.samplerate)
@@ -244,6 +245,7 @@ def apply_model(model: tp.Union[BagOfModels, Model],
         for shift_idx in range(shifts):
             offset = random.randint(0, max_shift)
             shifted = TensorChunk(padded_mix, offset, length + max_shift - offset)
+            print("shifted", offset, max_shift, shifted.shape)
             kwargs["callback"] = (
                     (lambda d, i=shift_idx: callback(_replace_dict(d, ("shift_idx", i)))
                      if callback else None)
@@ -257,6 +259,7 @@ def apply_model(model: tp.Union[BagOfModels, Model],
     elif split:
         kwargs['split'] = False
         out = th.zeros(batch, len(model.sources), channels, length, device=mix.device)
+        print("out init", out.shape)
         sum_weight = th.zeros(length, device=mix.device)
         if segment is None:
             segment = model.segment
@@ -275,8 +278,11 @@ def apply_model(model: tp.Union[BagOfModels, Model],
         # transition_power is 1.
         weight = (weight / weight.max())**transition_power
         futures = []
+        print("offsets", offsets)
+        dump(weight, "weight");
         for offset in offsets:
             chunk = TensorChunk(mix, offset, segment_length)
+            print("split input", mix.shape[-1], offset, segment_length, chunk.length)
             future = pool.submit(apply_model, model, chunk, **kwargs, callback_arg=callback_arg,
                                  callback=(lambda d, i=offset:
                                            callback(_replace_dict(d, ("segment_offset", i)))
@@ -295,7 +301,10 @@ def apply_model(model: tp.Union[BagOfModels, Model],
             out[..., offset:offset + segment_length] += (
                 weight[:chunk_length] * chunk_out).to(mix.device)
             sum_weight[offset:offset + segment_length] += weight[:chunk_length].to(mix.device)
+            print("split chunks", chunk_out.shape, chunk_length, segment_length)
         assert sum_weight.min() > 0
+        dump(sum_weight, "sumweight")
+        dump(out, "split-out")
         out /= sum_weight
         assert isinstance(out, th.Tensor)
         return out
@@ -314,7 +323,11 @@ def apply_model(model: tp.Union[BagOfModels, Model],
             if callback is not None:
                 callback(_replace_dict(callback_arg, ("state", "start")))  # type: ignore
         with th.no_grad():
+            update_count()
+            #print(padded_mix)
+            dump(padded_mix, "input")
             out = model(padded_mix)
+            dump(out, "output")
         with lock:
             if callback is not None:
                 callback(_replace_dict(callback_arg, ("state", "end")))  # type: ignore
