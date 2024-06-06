@@ -518,28 +518,36 @@ class HTDemucs(nn.Module):
         if not self.use_train_segment:
             return length
         training_length = int(self.segment * self.samplerate)
+#        print("training_length", training_length)
         if training_length < length:
             raise ValueError(
                     f"Given length {length} is longer than "
                     f"training length {training_length}")
         return training_length
 
-    def forward(self, mix):
+    def forward(self, mix, mag):
+#        print("htdemucs shape", mix.shape)
+#        print("bottom_channels", self.bottom_channels)
         length = mix.shape[-1]
         length_pre_pad = None
         if self.use_train_segment:
-            if self.training:
-                self.segment = Fraction(mix.shape[-1], self.samplerate)
-            else:
-                training_length = int(self.segment * self.samplerate)
-                if mix.shape[-1] < training_length:
-                    length_pre_pad = mix.shape[-1]
-                    mix = F.pad(mix, (0, training_length - length_pre_pad))
-        z = self._spec(mix)
-        mag = self._magnitude(z).to(mix.device)
+#            if self.training:
+#                self.segment = Fraction(mix.shape[-1], self.samplerate)
+#            else:
+            training_length = 343980 #int(self.segment * self.samplerate)
+            if mix.shape[-1] < training_length:
+                length_pre_pad = mix.shape[-1]
+                mix = F.pad(mix, (0, training_length - length_pre_pad))
+        print("padded shape", mix.shape)
+#        z = self._spec(mix)
+#        z = stft
+        #print("stft shape", z.shape, z.dtype)
+        #mag = self._magnitude(z).to(mix.device)
         x = mag
 
         B, C, Fq, T = x.shape
+        
+        print("mag shape", x.shape)
 
         # unlike previous Demucs, we always normalize because it is easier.
         mean = x.mean(dim=(1, 2, 3), keepdim=True)
@@ -633,6 +641,8 @@ class HTDemucs(nn.Module):
         x_device = x.device
         if x_is_mps_xpu:
             x = x.cpu()
+        
+        return x, xt
 
         zout = self._mask(z, x)
         if self.use_train_segment:
