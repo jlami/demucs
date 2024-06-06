@@ -1,6 +1,6 @@
 # Release notes for Demucs
 
-## V4.1.0a1, TBD
+## V4.1.0a, TBD
 
 Get models list
 
@@ -13,6 +13,8 @@ Use api in separate.py
 Added `--other-method`: method to get `no_{STEM}`, add up all the other stems (add), original track substract the specific stem (minus), and discard (none)
 
 Added type `HTDemucs` to type alias `AnyModel`.
+
+Improving recent torchaudio versions support (Thanks @CarlGao4) 
 
 ## V4.0.1, 8th of September 2023
 
